@@ -7,8 +7,7 @@
     <workType>Hauling</workType>
     <verb>compact</verb>
     <gerund>compacting</gerund>
-    <directOrderable>true</directOrderable>
-    <priorityInType>85</priorityInType>
+    <directOrderable>false</directOrderable>
     <requiredCapacities>
       <li>Manipulation</li>
     </requiredCapacities>

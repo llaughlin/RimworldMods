@@ -12,14 +12,14 @@ namespace StockpileEfficiency
         public override float GetPriority(Pawn pawn, TargetInfo targetInfo)
         {
             var result = base.GetPriority(pawn, targetInfo);
-            Debug.Log($"GetPriority {new {pawn, targetInfo, result}}");
+            // Debug.Log($"GetPriority {new {pawn, targetInfo, result}}");
             return result;
         }
 
         public override bool HasJobOnCell(Pawn pawn, IntVec3 cell)
         {
             var result = base.HasJobOnCell(pawn, cell);
-            Debug.Log($"HasJobOnCell {new {pawn, cell, result}}");
+            // Debug.Log($"HasJobOnCell {new {pawn, cell, result}}");
             return result;
         }
 
@@ -27,21 +27,21 @@ namespace StockpileEfficiency
         public override bool HasJobOnThingForced(Pawn pawn, Thing thing)
         {
             var result = base.HasJobOnThingForced(pawn, thing);
-            Debug.Log($"HasJobOnThingForced {new {pawn, thing, result}}");
+            // Debug.Log($"HasJobOnThingForced {new {pawn, thing, result}}");
             return result;
         }
 
         public override Job JobOnCell(Pawn pawn, IntVec3 cell)
         {
             var result = base.JobOnCell(pawn, cell);
-            Debug.Log($"JobOnCell {new {pawn, cell, result}}");
+            // Debug.Log($"JobOnCell {new {pawn, cell, result}}");
             return result;
         }
 
         public override Job JobOnThingForced(Pawn pawn, Thing thing)
         {
             var result = base.JobOnThingForced(pawn, thing);
-            Debug.Log($"JobOnThingForced {new {pawn, thing, result}}");
+            // Debug.Log($"JobOnThingForced {new {pawn, thing, result}}");
             return result;
         }
 
@@ -102,7 +102,7 @@ namespace StockpileEfficiency
             }
         }
 
-        private bool LogTick => Find.TickManager.TicksGame % 10 == 0;
+        private bool LogTick => false;//Find.TickManager.TicksGame % 10 == 0;
 
         public override bool HasJobOnThing(Pawn pawn, Thing thing)
         {
@@ -110,6 +110,7 @@ namespace StockpileEfficiency
 
             //Debug.Log($"Pawn {pawn} intervalTick(10)? {pawn.IsHashIntervalTick(10)}");
             //if (!pawn.IsHashIntervalTick(10)) return false;
+
             if (!CanHaul(pawn, thing)) return false;
 
             if (!IsThingCompactible(thing)) return false;
@@ -118,7 +119,14 @@ namespace StockpileEfficiency
 
             if (otherThing == null) return false;
 
-            return CanHaul(pawn, thing, otherThing, true);
+            if (CanHaul(pawn, thing, otherThing, true))
+            // Reserve both source and destination to prevent other pawns from trying to haul either
+            {
+                pawn.Reserve(thing);
+                pawn.Reserve(otherThing);
+                return true;
+            }
+            return false;
         }
 
         private bool IsThingCompactible(Thing thing)
@@ -143,8 +151,7 @@ namespace StockpileEfficiency
             }
 
             if (LogTick)
-                Debug.Log(
-                    $"Potential compacting at {thing.Position} in {stockpile} of type {thingDef}: only has {thing.stackCount}/{thingDef.stackLimit}");
+                Debug.Log($"Potential compacting at {thing.Position} in {stockpile} of type {thingDef}: only has {thing.stackCount}/{thingDef.stackLimit}");
             return true;
         }
 
@@ -171,7 +178,7 @@ namespace StockpileEfficiency
                 return null;
             }
 
-            Debug.Log($"Found thing to stack onto: {otherThing} has {otherThing.stackCount}/{otherThing.def.stackLimit}");
+            //Debug.Log($"Found thing to stack onto: {otherThing} has {otherThing.stackCount}/{otherThing.def.stackLimit}");
             return otherThing;
         }
 
@@ -190,56 +197,36 @@ namespace StockpileEfficiency
                 Log.Message($"Didn't find any cell to haul to. {thisThing} at {thisThing.Position}");
                 return null;
             }
-            if (!CanHaul(pawn, thisThing, foundStackableThing)) return null;
+            if (!pawn.CanReserve(foundStackableThing)) return null;
 
             var stockpile = thisThing.Map.zoneManager.ZoneAt(thisThing.Position) as Zone_Stockpile;
-            Log.Message(
-                $"Found cell to haul {thisThing.stackCount} of {thisThing} to : {foundStackableThing.Position} in zone {stockpile}, having {foundStackableThing.stackCount}/{foundStackableThing.def.stackLimit}");
+            //Log.Message($"Found cell to haul {thisThing.stackCount} of {thisThing} to : {foundStackableThing.Position} in zone {stockpile}, having {foundStackableThing.stackCount}/{foundStackableThing.def.stackLimit}");
 
-            if (!CanHaul(pawn, thisThing, foundStackableThing))
-            {
-                Log.Warning(
-                    $"About to create hauling job for {pawn} from {thisThing} to {foundStackableThing} in zone {stockpile}, but one of the things is already reserved!");
-                CanHaul(pawn, thisThing, foundStackableThing, true);
-                return null;
-            }
 
             var job = HaulAIUtility.HaulMaxNumToCellJob(pawn, thisThing, foundStackableThing.Position, true);
 
-            if (!CanHaul(pawn, thisThing, foundStackableThing))
-            {
-                Log.Warning(
-                    $"Created hauling job for {pawn} from {thisThing} to {foundStackableThing} in zone {stockpile}, but one of the things is already reserved!");
-                CanHaul(pawn, thisThing, foundStackableThing, true);
-                return null;
-            }
-
-            CanHaul(pawn, thisThing, foundStackableThing, true);
 
             return job;
         }
 
         public bool CanHaul(Pawn pawn, Thing target, Thing destination = null, bool logValues = false)
         {
-            var canHaulTarget = 
-                //(HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, target)
-                //                 || HaulAIUtility.PawnCanAutomaticallyHaul(pawn, target))
-                //                && !pawn.Map.reservationManager.IsReserved(target, pawn.Faction)&&
-                                          pawn.CanReserve(target, 1);
+            var canHaulTarget =
+                (HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, target)
+                    || HaulAIUtility.PawnCanAutomaticallyHaul(pawn, target)) && pawn.CanReserve(target);
 
 
             var canHaulDestination = true;
 
             if (destination != null)
             {
-                canHaulDestination = 
-                    //(HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, destination) || HaulAIUtility.PawnCanAutomaticallyHaul(pawn, destination))
-                                         //&& !pawn.Map.reservationManager.IsReserved(destination, pawn.Faction) && 
-                                         pawn.CanReserve(destination, 1);
+                canHaulDestination =
+                    (HaulAIUtility.PawnCanAutomaticallyHaulFast(pawn, destination)
+                        || HaulAIUtility.PawnCanAutomaticallyHaul(pawn, destination)) && pawn.CanReserve(target);
             }
 
-            if (logValues || LogTick)
-                Debug.Log( $"Pawn {pawn} can haul {target}={canHaulTarget} to {destination}={canHaulDestination}: {canHaulTarget && canHaulDestination}");
+            if (LogTick)
+                Debug.Log($"Pawn {pawn} can haul {target}={canHaulTarget} to {destination}={canHaulDestination}: {canHaulTarget && canHaulDestination}");
             return canHaulTarget && canHaulDestination;
         }
 
