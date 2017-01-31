@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<WorkGivers>
+  <WorkGiverDef>
+    <defName>CompactStockpiles</defName>
+    <label>compact stockpile by stacking as many as possible</label>
+    <giverClass>StockpileEfficiency.WorkGiver_CompactStockpiles</giverClass>
+    <workType>Hauling</workType>
+    <verb>compact</verb>
+    <gerund>compacting</gerund>
+    <directOrderable>true</directOrderable>
+    <priorityInType>85</priorityInType>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+</WorkGivers>

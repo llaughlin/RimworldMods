@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<ModMetaData>
+
+  <name>Stockpile Efficiency</name>
+
+  <author>llaughlin</author>
+
+  <targetVersion>0.16.1393</targetVersion>
+
+  <description>Adds a new WorkGiver for hauling that tries to stack as many items as possible.  </description>
+
+</ModMetaData>
