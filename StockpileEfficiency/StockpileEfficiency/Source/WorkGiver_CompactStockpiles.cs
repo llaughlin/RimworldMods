@@ -9,6 +9,48 @@ namespace StockpileEfficiency
 {
     public class WorkGiver_CompactStockpiles : WorkGiver_Haul
     {
+        private readonly Dictionary<Pawn, Job> _HaulingJobs = new Dictionary<Pawn, Job>();
+        private int _LastTick;
+
+
+        public override int LocalRegionsToScanFirst
+            => LogProperty("LocalRegionsToScanFirst", base.LocalRegionsToScanFirst);
+
+        public override PathEndMode PathEndMode => PathEndMode.ClosestTouch;
+
+        public override ThingRequest PotentialWorkThingRequest
+            => LogProperty("PotentialWorkThingRequest", ThingRequest.ForGroup(ThingRequestGroup.HaulableEver));
+
+        public override bool Prioritized
+            => LogProperty("Prioritized", base.Prioritized);
+
+        //public override IEnumerable<IntVec3> PotentialWorkCellsGlobal(Pawn pawn)
+        //{
+        //    return base.PotentialWorkCellsGlobal(pawn);
+        //    //Debug.Log($"PotentialWorkCellsGlobal {new { pawn }}");
+        //    //var stockpiles = pawn.Map.zoneManager.AllZones.OfType<Zone_Stockpile>();
+        //    //foreach (var stockpile in stockpiles)
+        //    //{
+        //    //    //Debug.Log($"Checking stockpike {stockpile}");
+        //    //    var stockpileThings = stockpile.AllContainedThings.Where(t => t.def.EverHaulable);
+
+        //    //    var grouped = stockpileThings.GroupBy(t => t.def);
+        //    //    foreach (var group in grouped)
+        //    //    {
+        //    //        foreach (var thing in group)
+        //    //        {
+        //    //            var thingDef = thing.def;
+        //    //            if (IsThingCompactible(thing)) continue;
+        //    //            //Debug.Log($"Potential compacting at {thing.Position} of type {thingDef}: only has {thing.stackCount}/{thingDef.stackLimit}");
+        //    //            yield return thing.Position;
+        //    //        }
+        //    //    }
+        //    //}
+        //}
+
+        private static bool LogTick => Find.TickManager.TicksGame % 10 == 0;
+        private TickManager TickManager => Find.TickManager;
+
         public override float GetPriority(Pawn pawn, TargetInfo targetInfo)
         {
             var result = base.GetPriority(pawn, targetInfo);
@@ -52,48 +94,6 @@ namespace StockpileEfficiency
             return result;
         }
 
-
-
-        public override int LocalRegionsToScanFirst
-            => LogProperty("LocalRegionsToScanFirst", base.LocalRegionsToScanFirst);
-
-        public override PathEndMode PathEndMode => PathEndMode.ClosestTouch;
-
-        public override ThingRequest PotentialWorkThingRequest
-            => LogProperty("PotentialWorkThingRequest", ThingRequest.ForGroup(ThingRequestGroup.HaulableEver));
-
-        public override bool Prioritized
-            => LogProperty("Prioritized", base.Prioritized);
-
-        //public override IEnumerable<IntVec3> PotentialWorkCellsGlobal(Pawn pawn)
-        //{
-        //    return base.PotentialWorkCellsGlobal(pawn);
-        //    //Debug.Log($"PotentialWorkCellsGlobal {new { pawn }}");
-        //    //var stockpiles = pawn.Map.zoneManager.AllZones.OfType<Zone_Stockpile>();
-        //    //foreach (var stockpile in stockpiles)
-        //    //{
-        //    //    //Debug.Log($"Checking stockpike {stockpile}");
-        //    //    var stockpileThings = stockpile.AllContainedThings.Where(t => t.def.EverHaulable);
-
-        //    //    var grouped = stockpileThings.GroupBy(t => t.def);
-        //    //    foreach (var group in grouped)
-        //    //    {
-        //    //        foreach (var thing in group)
-        //    //        {
-        //    //            var thingDef = thing.def;
-        //    //            if (IsThingCompactible(thing)) continue;
-        //    //            //Debug.Log($"Potential compacting at {thing.Position} of type {thingDef}: only has {thing.stackCount}/{thingDef.stackLimit}");
-        //    //            yield return thing.Position;
-        //    //        }
-        //    //    }
-        //    //}
-        //}
-
-        private static bool LogTick => Find.TickManager.TicksGame % 10 == 0;
-        private int _LastTick = 0;
-        private readonly Dictionary<Pawn, Job> _HaulingJobs = new Dictionary<Pawn, Job>();
-        private TickManager TickManager => Find.TickManager;
-
         //public override bool HasJobOnThing(Pawn pawn, Thing thing)
         //{
         //    //Debug.Log($"HasJobOnThing {new { pawn, thing }}");
@@ -131,49 +131,56 @@ namespace StockpileEfficiency
             var canHaulToDestination = true;
 
             if (destination != null)
-            {
                 canHaulToDestination = HaulablePlaceValidator(target, pawn, destination);
-            }
 
             //if (logValues || LogTick) Debug.Log($"Pawn {pawn} can haul {target}={canHaulTarget} to {destination}={canHaulDestination}: {canHaulTarget && canHaulDestination}");
 
             return canHaulTarget && canHaulToDestination;
         }
 
-        private static bool HaulablePlaceValidator(Thing haulable, Pawn worker, Thing destination)
+        public static Thing HaulPlaceBlockerIn(Thing haulThing, IntVec3 c, Map map, bool checkBlueprints)
         {
-            var destinationCell = destination.Position;
-            var canReserveDestination = worker.CanReserveAndReach(destinationCell, PathEndMode.OnCell, worker.NormalMaxDanger());
-            var cantReserveDestination = !worker.CanReserveAndReach(destinationCell, PathEndMode.OnCell, worker.NormalMaxDanger());
-            var haulBlocked = GenPlace.HaulPlaceBlockerIn(haulable, destinationCell, worker.Map, true) != null;
-            if (haulBlocked && destination.def.stackLimit - destination.stackCount >= haulable.stackCount)
+            var thingList = map.thingGrid.ThingsListAt(c);
+            foreach (var thing in thingList)
             {
-                haulBlocked = false;
+                if (checkBlueprints && thing.def.IsBlueprint ||
+                    (thing.def.category != ThingCategory.Plant || thing.def.passability != Traversability.Standable) &&
+                    thing.def.category != ThingCategory.Filth &&
+                    (haulThing == null || thing.def.category != ThingCategory.Item || !thing.CanStackWith(haulThing)) &&
+                    (thing.def.EverHaulable || haulThing != null && GenSpawn.SpawningWipes(haulThing.def, thing.def) ||
+                     thing.def.passability != Traversability.Standable && thing.def.surfaceType != SurfaceType.Item))
+                    return thing;
             }
-            var notStandable = !destinationCell.Standable(worker.Map);
-            var samePosition = destinationCell == haulable.Position && haulable.Spawned;
-            var plantingBlocked = haulable != null && haulable.def.BlockPlanting && worker.Map.zoneManager.ZoneAt(destinationCell) is Zone_Growing;
-            Building edifice = destinationCell.GetEdifice(worker.Map);
+            return null;
+        }
+
+        private static bool HaulablePlaceValidator(Thing target, Pawn pawn, Thing destination)
+        {
+            return StoreUtility.IsGoodStoreCell(destination.Position, pawn.Map, target, pawn, pawn.Faction);
+            var destinationCell = destination.Position;
+            var canReserveDestination = pawn.CanReserveAndReach(destinationCell, PathEndMode.OnCell, pawn.NormalMaxDanger());
+            var cantReserveDestination = !pawn.CanReserveAndReach(destinationCell, PathEndMode.OnCell, pawn.NormalMaxDanger());
+            var haulBlocked = HaulPlaceBlockerIn(target, destinationCell, pawn.Map, true) != null;
+            var notStandable = !destinationCell.Standable(pawn.Map);
+            var samePosition = destinationCell == target.Position && target.Spawned;
+            var plantingBlocked = target != null && target.def.BlockPlanting && pawn.Map.zoneManager.ZoneAt(destinationCell) is Zone_Growing;
+            var edifice = destinationCell.GetEdifice(pawn.Map);
             var isTrap = edifice is Building_Trap;
 
             if (cantReserveDestination || haulBlocked || notStandable || samePosition || plantingBlocked || isTrap)
-            {
-
                 if (canReserveDestination)
                 {
-                    Log.Warning($"{worker} can reserve destination, but failed hauling validator: {new { canReserveDestination, cantReserveDestination, haulBlocked, notStandable, samePosition, plantingBlocked, isTrap }}");
+                    Log.Warning(
+                        $"{pawn} can reserve destination, but failed hauling validator: {new { canReserveDestination, cantReserveDestination, haulBlocked, notStandable, samePosition, plantingBlocked, isTrap }}");
                     return false;
                 }
-            }
-            if (haulable.def.passability != Traversability.Standable)
-            {
-                for (int index = 0; index < 8; ++index)
+            if (target.def.passability != Traversability.Standable)
+                for (var index = 0; index < 8; ++index)
                 {
-                    IntVec3 c1 = destinationCell + GenAdj.AdjacentCells[index];
-                    if (worker.Map.designationManager.DesignationAt(c1, DesignationDefOf.Mine) != null)
+                    var c1 = destinationCell + GenAdj.AdjacentCells[index];
+                    if (pawn.Map.designationManager.DesignationAt(c1, DesignationDefOf.Mine) != null)
                         return false;
                 }
-            }
             return true;
         }
 
@@ -187,16 +194,10 @@ namespace StockpileEfficiency
                 return false;
             }
             if (thing.stackCount >= thingDef.stackLimit)
-            {
-                //Debug.Log($"Thing {thing} at thingdef {thingDef} stacklimit of {thingDef.stackLimit}");
                 return false;
-            }
             var stockpile = thing.Map.zoneManager.ZoneAt(thing.Position) as Zone_Stockpile;
             if (stockpile == null)
-            {
-                //Debug.Log($"{thing.Position} not a valid stockpile, ignoring");
                 return false;
-            }
 
             //if (LogTick) Debug.Log($"Potential compacting at {thing.Position} in {stockpile} of type {thingDef}: only has {thing.stackCount}/{thingDef.stackLimit}");
             return true;
@@ -206,10 +207,7 @@ namespace StockpileEfficiency
         {
             var stockpile = thisThing.Map.zoneManager.ZoneAt(thisThing.Position) as Zone_Stockpile;
             if (stockpile == null)
-            {
-                //Log.Warning($"{target.Position} not a valid stockpile, ignoring");
                 return null;
-            }
             //Debug.Log($"Thing {target} is in valid stockpile");
             var otherThings = stockpile.AllContainedThings
                     .Where(other => other.thingIDNumber != thisThing.thingIDNumber)
@@ -228,11 +226,7 @@ namespace StockpileEfficiency
         public override bool HasJobOnThing(Pawn pawn, Thing target)
         {
             var job = JobOnThing(pawn, target);
-            if (job == null) return false;
-
-            var jobTarget = job.targetA;
-            var jobDestination = job.targetB;
-            return jobTarget == target;
+            return job != null;
         }
 
         public override Job JobOnThing(Pawn pawn, Thing target)
@@ -246,24 +240,23 @@ namespace StockpileEfficiency
 
             if (_HaulingJobs.TryGetValue(pawn, out Job cachedJob))
             {
-                return cachedJob;
+                var jobTarget = cachedJob.targetA;
+                if (jobTarget == target)
+                {
+                    Debug.Log($"Found cached job for {pawn} hauling {target.stackCount} {target.def.defName}");
+                    return cachedJob;
+                }
+                return null;
             }
             //Debug.Log($"JobOnThing  {new { pawn, target }}");
             if (!CanHaul(pawn, target))
-            {
                 return null;
-            }
 
             if (!IsThingCompactible(target))
-            {
                 return null;
-            }
             var destination = FindThingToStackOnto(pawn, target);
             if (destination == null)
-            {
-                //Log.Message($"Didn't find any cell to haul to. {target} at {target.Position}");
                 return null;
-            }
 
 
             var stockpile = target.Map.zoneManager.ZoneAt(target.Position) as Zone_Stockpile;
@@ -271,34 +264,33 @@ namespace StockpileEfficiency
 
 
             if (!CanHaul(pawn, target, destination))
-            {
                 return null;
-            }
-
-            //if (!HaulablePlaceValidator(target, pawn, destination.Position))
-            //{
-            //    Debug.Log($"{pawn} failed validator hauling {target.stackCount} {target} to {destination.stackCount} {destination}@{destination.Position} ");
-            //    return null;
-            //}
 
             // reserve target and destination
-            if (!pawn.CanReserveAndReach(target, PathEndMode.ClosestTouch, pawn.NormalMaxDanger()) || !pawn.Reserve(target))
+            if (!CanHaul(pawn, target, destination) || !pawn.Reserve(target))
             {
                 Debug.LogWarning($"{pawn} failed to reserve target {target.stackCount} {target}");
                 pawn.ClearReservations();
                 return null;
             }
-            if (!pawn.CanReserveAndReach(destination, PathEndMode.OnCell, pawn.NormalMaxDanger()) || !pawn.Reserve(destination))
+            if (!CanHaul(pawn, target, destination) || !pawn.Reserve(destination))
             {
                 Debug.LogWarning($"{pawn} failed to reserve destination {destination.stackCount} {destination}");
                 pawn.ClearReservations();
                 return null;
             }
-            var job = HaulAIUtility.HaulMaxNumToCellJob(pawn, target, destination.Position, true);
+            if (!CanHaul(pawn, target, destination))
+            {
+                Debug.LogWarning($"{pawn} can't haul {target.stackCount} {target.def.defName} to {destination.stackCount} {destination} after reserving");
+                pawn.ClearReservations();
+                return null;
+            }
+            var job = HaulAIUtility.HaulMaxNumToCellJob(pawn, target, destination.Position, false);
 
             _HaulingJobs.Add(pawn, job);
 
-            Log.Message($"{pawn} hauling {target.stackCount} of {target} to {destination.Position} in zone {stockpile}, having {destination.stackCount}/{destination.def.stackLimit}");
+            Log.Message(
+                $"{pawn} hauling {target.stackCount} of {target} to {destination.Position} in zone {stockpile}, having {destination.stackCount}/{destination.def.stackLimit}");
             return job;
         }
 
