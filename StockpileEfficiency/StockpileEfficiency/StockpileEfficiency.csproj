@@ -61,7 +61,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy $(TargetPath) C:\RimWorldAlpha16Win\RimWorld1393Win\Mods\StockpileEfficiency\Assemblies\$(TargetFileName)
+    <PostBuildEvent>rem copy $(TargetPath) G:\RimWorld16\Mods\StockpileEfficiency\Assemblies\$(TargetFileName)
 </PostBuildEvent>
   </PropertyGroup>
 </Project>
